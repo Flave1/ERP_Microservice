@@ -1,0 +1,163 @@
+﻿using Deposit.Contracts.Response.Deposit.Deposit_form;
+using Deposit.Contracts.Response.Deposit.Operation;
+using Deposit.DomainObjects.Deposit;
+using Deposit.Repository.Interface.Deposit;
+using Deposit.Requests;
+using Deposit.Data;
+using GOSLibraries.GOS_Error_logger.Service;
+using MediatR;
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks; 
+
+namespace Deposit.Handlers.Deposit.Deposit_form
+{
+    public class Withdrwal_from_customer_accountCommandHandler : IRequestHandler<Withdrwal_from_customer_accountCommand, Account_response>
+    {
+        private readonly ILoggerService _logger;
+        private readonly DataContext _dataContext;
+        private readonly ICustomerService _customer;
+        private readonly IIdentityServerRequest _serverRequest;
+        
+        public Withdrwal_from_customer_accountCommandHandler(ILoggerService logger, DataContext dataContext, IIdentityServerRequest serverRequest, ICustomerService customer)
+        {
+            _dataContext = dataContext;
+            _customer = customer;
+            _logger = logger;
+            _serverRequest = serverRequest;
+        }
+
+        public deposit_withdrawal_form Build_DB_object(Withdrwal_from_customer_accountCommand request, deposit_withdrawal_form db_item)
+        {
+            var user = _serverRequest.UserDataAsync().Result;
+            db_item = new deposit_withdrawal_form();
+            db_item.Id = request.Id;
+            db_item.Withdrawal_type = request.Withdrawal_type;
+            db_item.Account_number = request.Account_number;
+            db_item.Amount = request.Amount;
+            db_item.CustomerId = request.CustomerId;
+            db_item.Available_balance = request.CustomerId;
+            db_item.Instrument_date = request.Withdrawal_instrument_date;
+            db_item.Product = request.Product;
+            db_item.Transaction_date = DateTime.UtcNow;
+            db_item.Value_date = DateTime.UtcNow;
+            db_item.Currency = request.Currency;
+            db_item.Structre = user.CompanyId;
+
+            return db_item; 
+        }
+
+        public Account_response Validate_transaction(deposit_withdrawal_form request)
+        {
+            var validation_response = new Account_response();
+            var customer_account_details = _dataContext.deposit_customer_account_information.FirstOrDefault(e => e.AccountNumber.ToLower() == request.Account_number.ToLower());
+
+            if(customer_account_details == null)
+            {
+                validation_response.Status.Message.FriendlyMessage = "Invalid customer account number";
+                return validation_response;
+            }
+
+            if (DateTime.UtcNow.Date > customer_account_details.Date_to_go_dormant)
+            {
+                validation_response.Status.Message.FriendlyMessage = "Unable to process transaction for a dormant account";
+                return validation_response;
+            }
+
+            //if (customer_account_details.AvailableBalance < request.Amount)
+            //{
+            //    validation_response.Status.Message.FriendlyMessage = "Insufficient balance";
+            //    return validation_response;
+            //}
+
+             
+            if (customer_account_details != null)
+            {
+                var this_account_operating_currencies = customer_account_details.Currencies.Split(',').ToList().Select(int.Parse).ToList();
+                if(!this_account_operating_currencies.Any(r => r == request.Currency))
+                {
+                    validation_response.Status.Message.FriendlyMessage = "this account does not operate on selected currency";
+                    return validation_response;
+                }
+            }
+
+            var current_day_withdrawals = _dataContext.deposit_withdrawal_form.Where(e => e.CreatedOn.Value.Date == DateTime.UtcNow.Date && e.Product == request.Product).ToList();
+
+            if (current_day_withdrawals.Any())
+            {
+                var total_withdraws = current_day_withdrawals.Sum(e => e.Amount) + request.Amount;
+                var current_prod = _dataContext.deposit_withdrawalsetup.FirstOrDefault(e => e.Product == request.Product);
+                if (current_prod != null)
+                {
+                    if (total_withdraws > current_prod?.DailyWithdrawalLimit) 
+                    {
+                        validation_response.Status.Message.FriendlyMessage = "Daily withdrawal limit exceeded";
+                        return validation_response;
+                    }
+                }
+            }
+
+            validation_response.Status.IsSuccessful = true;
+            return validation_response;
+        }
+           
+        public void Update_customer_from_deposit(deposit_withdrawal_form withdrawal)
+        { 
+            var customer_acount_detiails = _dataContext.deposit_customer_account_information.FirstOrDefault(e => e.CustomerId == withdrawal.CustomerId);
+            if(customer_acount_detiails != null)
+            {
+                //customer_acount_detiails.AvailableBalance = (customer_acount_detiails.AvailableBalance - withdrawal.Amount - _customer.Return_withdrawal_charges_if_applicable(withdrawal.Product));
+                //customer_acount_detiails.Date_to_go_dormant.AddDays(_customer.Return_dormancy_days(customer_acount_detiails.CustomerId));
+            }
+            
+        }
+
+        
+
+        public async Task<Account_response> Handle(Withdrwal_from_customer_accountCommand request, CancellationToken cancellationToken)
+        {
+            var response = new Account_response();
+            try
+            { 
+                var item = _dataContext.deposit_withdrawal_form.Find(request.Id); 
+                if (item == null) item = new deposit_withdrawal_form(); 
+                item = Build_DB_object(request, item);
+
+                var validation_reponse = Validate_transaction(item);
+                if (!validation_reponse.Status.IsSuccessful)
+                    return validation_reponse;
+
+                _dataContext.deposit_withdrawal_form.Add(item);
+                using (var transaction = await _dataContext.Database.BeginTransactionAsync())
+                {
+                    try
+                    {
+                        Update_customer_from_deposit(item);
+                        await _customer.Remove_from_staff_opening_balance(item.Amount, item.Currency);
+                        await _dataContext.SaveChangesAsync(); 
+                        await transaction.CommitAsync();
+                        response.Status.IsSuccessful = true;
+                        response.Status.Message.FriendlyMessage = "successful";
+                        return response;
+                    }
+                    catch (Exception e)
+                    {
+                        await transaction.RollbackAsync();
+                        response.Status.Message.FriendlyMessage = e?.Message ?? e?.InnerException?.Message;
+                        response.Status.Message.TechnicalMessage = e.ToString();
+                        return response;
+                    }
+                    finally { await transaction.DisposeAsync(); }
+                } 
+            }
+            catch (Exception e)
+            {
+                response.Status.Message.FriendlyMessage = e?.Message ?? e.InnerException?.Message;
+                response.Status.Message.TechnicalMessage = e.ToString();
+                _logger.Error(e.ToString());
+                return response;
+            }
+        }
+    }
+}

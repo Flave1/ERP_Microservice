@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Handlers\Deposit\AccountOpeneing\Account_mandate\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="9.0.0" />
+    <PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="5.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deposit.Contracts\Deposit.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="GOSLibraries">
+      <HintPath>..\..\..\Purchase_and_payables\GOSERP_PURCHASE-PAYABLE\App\Lib\GOSLibraries.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
