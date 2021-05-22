@@ -17,7 +17,7 @@ namespace Deposit.Contracts.Response
 
     public class AccountResponse<T>
     {
-        public List<T> List { get; set; }
+        public List<T> List { get; set; } = new List<T>();
         public APIResponseStatus Status { get; set; } = new APIResponseStatus { IsSuccessful = true, Message = new APIResponseMessage() };
     }
 }

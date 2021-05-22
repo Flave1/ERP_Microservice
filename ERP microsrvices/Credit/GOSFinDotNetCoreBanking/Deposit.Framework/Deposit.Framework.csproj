@@ -12,10 +12,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Deposit.BLL\Deposit.BLL.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Reference Include="GOSLibraries">
       <HintPath>..\Deposit\GosLibrary\GOSLibraries.dll</HintPath>
     </Reference>

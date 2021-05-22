@@ -24,13 +24,13 @@ namespace Deposit.Handlers.Operations.AccountOpeneing.Indiviadual_corporate.Quer
             public async Task<AccountResponse<GetCustomerQueryRepsonse>> Handle(CustomerLiteQuery request, CancellationToken cancellationToken)
             {
                 var response = new AccountResponse<GetCustomerQueryRepsonse>();
-                var query = _context.deposit_customer_lite_information.Include(e => e.deposit_individual_customer_information).Include(e => e.deposit_customer_account_information).Take(100).OrderByDescending(e => e.CreatedOn).Where(e => e.Deleted == false).ToList();
-                var customers = new List<GetCustomerQueryRepsonse>();
+                var query = _context.deposit_customer_lite_information
+                    .Include(e => e.deposit_individual_customer_information)
+                    .Include(e => e.deposit_customer_account_information).Take(100)
+                    .OrderByDescending(e => e.UpdatedOn).Where(e => e.Deleted == false && e.CustomerTypeId == (int)CustomerType.Individual); 
                 
-                customers.AddRange(query.Where(e => e.CustomerTypeId == (int)CustomerType.Individual).Select(e => new GetCustomerQueryRepsonse(e.deposit_individual_customer_information)).ToList());
-
-               // customers.AddRange(query.Where(e => e.CustomerTypeId == (int)CustomerType.Individual).Select(e => new GetCustomerQueryRepsonse(e.deposit_individual_customer_information)).ToList());
-                response.List = customers;
+                response.List = query.Select(e => new GetCustomerQueryRepsonse(e)).ToList();
+ 
                 return response;
             }
         }

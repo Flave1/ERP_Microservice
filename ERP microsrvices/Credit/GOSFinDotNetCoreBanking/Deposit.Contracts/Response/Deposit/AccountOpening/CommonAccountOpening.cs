@@ -1,5 +1,6 @@
 ﻿using Deposit.Contracts.Response.Common;
 using GODP.Entities.Models;
+using GOSLibraries.Enums;
 using GOSLibraries.GOS_API_Response;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -18,17 +19,29 @@ namespace Deposit.Contracts.Response.Deposit.AccountOpening
         public int CustomerTypeId { get; set; }
         public string AccountNumber { get; set; }
         public string Email { get; set; }
+        public string CustomerTypeName { get; set; }
+        public string Status { get; set; }
         public List<CustomerThumbs> CustomerThumbs { get; set; } = new List<CustomerThumbs>();
         public List<AccountInformation> AccountInformation { get; set; } = new List<AccountInformation>();
         public List<KYC> KYC { get; set; } = new List<KYC>();
         public List<Signatory> Signatories { get; set; } = new List<Signatory>();
-        public GetCustomerQueryRepsonse(deposit_individual_customer_information db)
+        public GetCustomerQueryRepsonse(deposit_customer_lite_information db)
         {
             CustomerId = db.CustomerId;
-            CustomerTypeId = db.deposit_customer_lite_information.CustomerTypeId;
-            CustomerName = db.Firstname + " " + db.Surname;
-            AccountNumber = string.Join(", ", db.deposit_customer_lite_information.deposit_customer_account_information.Select(e => e?.AccountNumber));
-            Email = db.Email;
+            CustomerTypeId = db?.CustomerTypeId??0;
+            CustomerTypeName = CustomerTypeId == 1 ? "Individual" : "Corporate";
+            CustomerName = db?.deposit_individual_customer_information?.Firstname + " " + db?.deposit_individual_customer_information?.Surname;
+            AccountNumber = db?.deposit_customer_account_information != null ? string.Join(", ", db?.deposit_customer_account_information?.Select(e => e?.AccountNumber)) : "";
+            Email = db?.deposit_individual_customer_information.Email;
+            if(db?.deposit_customer_account_information != null)
+            {
+                if (db.deposit_customer_account_information.Any(d => d.Date_to_go_dormant.Date < DateTime.UtcNow.Date))
+                    Status = "Dormant";
+                if (db.deposit_customer_account_information.All(d => d.Date_to_go_dormant.Date < DateTime.UtcNow.Date))
+                    Status = "Dormant";
+                else
+                    Status = "Active";
+            }
         }
     }
 
